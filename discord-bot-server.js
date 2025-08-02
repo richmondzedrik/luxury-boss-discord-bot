@@ -589,6 +589,10 @@ app.post('/api/send-boss', async (req, res) => {
 
     const bossData = req.body
     console.log('📥 Received boss data from frontend:', JSON.stringify(bossData, null, 2))
+    console.log('🔍 Key time fields received:')
+    console.log('   respawn_time:', bossData.respawn_time)
+    console.log('   time_of_death:', bossData.time_of_death)
+    console.log('   respawn_hours:', bossData.respawn_hours)
 
     // Check if the request includes admin verification
     // Note: In production, you should implement proper JWT token verification
@@ -639,6 +643,8 @@ app.post('/api/send-boss', async (req, res) => {
     console.log(`📤 Sending boss notification for: ${processedBossData.monster}`)
     console.log(`📋 Embed has ${embed.data.fields?.length || 0} fields`)
     console.log(`⏰ Formatted time: ${formatRespawnTime(processedBossData)}`)
+    console.log(`📅 Formatted date: ${formatDiscordDate(processedBossData)}`)
+    console.log(`🕐 Calculated respawn time: ${calculateRespawnTime(processedBossData)?.toISOString() || 'null'}`)
 
     const message = await channel.send({ embeds: [embed] })
 
