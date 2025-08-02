@@ -5,8 +5,8 @@
   "main": "discord-bot-server.js",
   "type": "module",
   "scripts": {
-    "start": "node discord-bot-server.js",
-    "dev": "node discord-bot-server.js"
+    "start": "TZ=Asia/Manila node discord-bot-server.js",
+    "dev": "TZ=Asia/Manila node discord-bot-server.js"
   },
   "dependencies": {
     "discord.js": "^14.14.1",
@@ -27,3 +27,4 @@
   "author": "Luxury Boss Status",
   "license": "MIT"
 }
+

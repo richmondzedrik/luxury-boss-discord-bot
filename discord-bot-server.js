@@ -28,6 +28,9 @@ import dotenv from 'dotenv'
 // Load environment variables
 dotenv.config()
 
+// Set timezone to Philippines
+process.env.TZ = 'Asia/Manila'
+
 const app = express()
 const PORT = process.env.PORT || 3001
 
@@ -435,37 +438,51 @@ async function updateParticipationEmbed(message, participationData) {
   }
 }
 
-// Helper function to calculate respawn time (EXACT same logic as website)
-function calculateRespawnTime(boss) {
-  // If respawn_time is provided and it's in the FUTURE, use it (EXACT website logic)
+// NEW: Website-exact calculation function with Philippines timezone
+function calculateRespawnTimeWebsite(boss) {
+  console.log('🌐 Website calculation for:', boss.monster)
+  console.log('🕐 Server timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone)
+  
+  // EXACT website logic from BossAlert.jsx and useBossMonitor.js
   if (boss.respawn_time) {
     const respawnDate = new Date(boss.respawn_time)
     const now = new Date()
+    console.log('   respawn_time provided:', boss.respawn_time)
+    console.log('   parsed date (Manila):', respawnDate.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+    console.log('   current time (Manila):', now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+    console.log('   is future?', respawnDate.getTime() > now.getTime())
+    
     if (!isNaN(respawnDate.getTime()) && respawnDate.getTime() > now.getTime()) {
-      console.log(`🕐 Using FUTURE API respawn_time for ${boss.monster}: ${boss.respawn_time}`)
       return respawnDate
     }
   }
 
-  // Otherwise calculate from time_of_death + respawn_hours (EXACT website logic)
   if (boss.time_of_death && boss.respawn_hours) {
     const deathTime = new Date(boss.time_of_death)
+    console.log('   time_of_death:', boss.time_of_death)
+    console.log('   respawn_hours:', boss.respawn_hours)
+    console.log('   death time (Manila):', deathTime.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+    
     if (!isNaN(deathTime.getTime())) {
       const respawnTime = new Date(deathTime.getTime() + (boss.respawn_hours * 60 * 60 * 1000))
-      console.log(`🕐 Calculated respawn time for ${boss.monster}: death(${boss.time_of_death}) + ${boss.respawn_hours}h = ${respawnTime.toISOString()}`)
+      console.log('   calculated respawn (Manila):', respawnTime.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
       return respawnTime
     }
   }
 
-  // Fallback to respawn_time even if it's in the past (EXACT website logic)
   if (boss.respawn_time) {
     const respawnDate = new Date(boss.respawn_time)
-    console.log(`🕐 Fallback to PAST API respawn_time for ${boss.monster}: ${boss.respawn_time}`)
+    console.log('   fallback to respawn_time (Manila):', respawnDate.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
     return respawnDate
   }
 
-  console.log(`⚠️ No valid respawn time found for ${boss.monster}`)
+  console.log('   no valid time found')
   return null
+}
+
+// UPDATE: Use website calculation
+function calculateRespawnTime(boss) {
+  return calculateRespawnTimeWebsite(boss)
 }
 
 // Helper function to format respawn time (same logic as website)
@@ -500,31 +517,34 @@ function formatRespawnTime(boss) {
   }
 }
 
-// Helper function to format date for Discord (EXACT same as website)
+// Helper function to format date for Discord (Philippines timezone)
 function formatDiscordDate(boss) {
   const respawnDate = calculateRespawnTime(boss)
   if (!respawnDate || isNaN(respawnDate.getTime())) {
     return null
   }
 
-  // Use the EXACT same formatting as website BossPage.jsx line 436-442
-  // This should match the website's display exactly
+  // Use Philippines timezone for formatting (same as user's device)
   try {
-    const formatted = respawnDate.toLocaleString([], {
+    const formatted = respawnDate.toLocaleString('en-US', {
+      timeZone: 'Asia/Manila',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: true
     })
-    console.log(`📅 Date formatting debug:`)
-    console.log(`   Input ISO: ${respawnDate.toISOString()}`)
-    console.log(`   Local time: ${respawnDate.toString()}`)
+    
+    console.log(`📅 Date formatting (Philippines timezone):`)
+    console.log(`   Input UTC: ${respawnDate.toISOString()}`)
+    console.log(`   Manila time: ${respawnDate.toLocaleString('en-US', { timeZone: 'Asia/Manila' })}`)
     console.log(`   Formatted: ${formatted}`)
-    console.log(`   Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    console.log(`   Timezone: Asia/Manila (GMT+8)`)
+    
     return formatted
   } catch (error) {
     console.error('Error formatting date:', error)
-    return respawnDate.toLocaleString()
+    return respawnDate.toLocaleString('en-US', { timeZone: 'Asia/Manila' })
   }
 }
 
@@ -600,6 +620,29 @@ app.get('/api/status', (_, res) => {
 
 app.post('/api/send-boss', async (req, res) => {
   try {
+    const bossData = req.body
+    
+    // ENHANCED DEBUG LOGGING with Philippines timezone
+    console.log('🔍 DEBUGGING TIME CALCULATION (Philippines GMT+8):')
+    console.log('Raw boss data:', JSON.stringify(bossData, null, 2))
+    
+    const now = new Date()
+    console.log('Current time (UTC):', now.toISOString())
+    console.log('Current time (Manila):', now.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+    console.log('Server timezone:', process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone)
+    
+    // Test calculation
+    const calculatedTime = calculateRespawnTime(bossData)
+    if (calculatedTime) {
+      console.log('Calculated respawn (UTC):', calculatedTime.toISOString())
+      console.log('Calculated respawn (Manila):', calculatedTime.toLocaleString('en-US', { timeZone: 'Asia/Manila' }))
+      
+      const diffMs = calculatedTime.getTime() - now.getTime()
+      console.log('Time difference (ms):', diffMs)
+      console.log('Time difference (seconds):', Math.floor(diffMs / 1000))
+      console.log('Formatted time:', formatRespawnTime(bossData))
+    }
+    
     if (!isConnected || !discordClient) {
       return res.status(503).json({
         success: false,
@@ -607,7 +650,6 @@ app.post('/api/send-boss', async (req, res) => {
       })
     }
 
-    const bossData = req.body
     console.log('📥 Received boss data from frontend:', JSON.stringify(bossData, null, 2))
     console.log('🔍 Key time fields received:')
     console.log('   respawn_time:', bossData.respawn_time)
