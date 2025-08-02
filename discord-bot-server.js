@@ -435,26 +435,33 @@ async function updateParticipationEmbed(message, participationData) {
   }
 }
 
-// Helper function to calculate respawn time (same logic as website)
+// Helper function to calculate respawn time (EXACT same logic as website)
 function calculateRespawnTime(boss) {
-  // ALWAYS prioritize respawn_time from API if it exists (regardless of past/future)
-  // This ensures Discord bot matches the website's display
+  // If respawn_time is provided and it's in the FUTURE, use it (EXACT website logic)
   if (boss.respawn_time) {
     const respawnDate = new Date(boss.respawn_time)
-    if (!isNaN(respawnDate.getTime())) {
-      console.log(`🕐 Using API respawn_time for ${boss.monster}: ${boss.respawn_time}`)
+    const now = new Date()
+    if (!isNaN(respawnDate.getTime()) && respawnDate.getTime() > now.getTime()) {
+      console.log(`🕐 Using FUTURE API respawn_time for ${boss.monster}: ${boss.respawn_time}`)
       return respawnDate
     }
   }
 
-  // Fallback: calculate from time_of_death + respawn_hours only if respawn_time is not available
+  // Otherwise calculate from time_of_death + respawn_hours (EXACT website logic)
   if (boss.time_of_death && boss.respawn_hours) {
     const deathTime = new Date(boss.time_of_death)
     if (!isNaN(deathTime.getTime())) {
       const respawnTime = new Date(deathTime.getTime() + (boss.respawn_hours * 60 * 60 * 1000))
-      console.log(`🕐 Calculated respawn time for ${boss.monster}: ${respawnTime.toISOString()}`)
+      console.log(`🕐 Calculated respawn time for ${boss.monster}: death(${boss.time_of_death}) + ${boss.respawn_hours}h = ${respawnTime.toISOString()}`)
       return respawnTime
     }
+  }
+
+  // Fallback to respawn_time even if it's in the past (EXACT website logic)
+  if (boss.respawn_time) {
+    const respawnDate = new Date(boss.respawn_time)
+    console.log(`🕐 Fallback to PAST API respawn_time for ${boss.monster}: ${boss.respawn_time}`)
+    return respawnDate
   }
 
   console.log(`⚠️ No valid respawn time found for ${boss.monster}`)
