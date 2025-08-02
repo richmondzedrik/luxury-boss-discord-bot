@@ -493,19 +493,32 @@ function formatRespawnTime(boss) {
   }
 }
 
-// Helper function to format date for Discord (same as website)
+// Helper function to format date for Discord (EXACT same as website)
 function formatDiscordDate(boss) {
   const respawnDate = calculateRespawnTime(boss)
   if (!respawnDate || isNaN(respawnDate.getTime())) {
     return null
   }
 
-  return respawnDate.toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  // Use the EXACT same formatting as website BossPage.jsx line 436-442
+  // This should match the website's display exactly
+  try {
+    const formatted = respawnDate.toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+    console.log(`📅 Date formatting debug:`)
+    console.log(`   Input ISO: ${respawnDate.toISOString()}`)
+    console.log(`   Local time: ${respawnDate.toString()}`)
+    console.log(`   Formatted: ${formatted}`)
+    console.log(`   Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+    return formatted
+  } catch (error) {
+    console.error('Error formatting date:', error)
+    return respawnDate.toLocaleString()
+  }
 }
 
 // Create boss embed with participation status
