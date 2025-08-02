@@ -1,0 +1,29 @@
+{
+  "name": "luxury-boss-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot server for Luxury Boss Status monitoring",
+  "main": "discord-bot-server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node discord-bot-server.js",
+    "dev": "node discord-bot-server.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "boss",
+    "monitoring",
+    "luxury"
+  ],
+  "author": "Luxury Boss Status",
+  "license": "MIT"
+}
