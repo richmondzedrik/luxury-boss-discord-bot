@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 
+console.log('🚀 Discord Bot Server starting...')
+
 /**
  * Discord Bot Server for Boss Monitoring
- * 
+ *
  * This is a standalone Node.js server that runs the Discord bot.
  * It can be run separately from the React application.
- * 
+ *
  * Usage:
  * 1. Set environment variables:
  *    - DISCORD_BOT_TOKEN: Your Discord bot token
  *    - DISCORD_CHANNEL_ID: The Discord channel ID to send messages to
- * 
+ *
  * 2. Run the server:
  *    node discord-bot-server.js
- * 
+ *
  * 3. The server will start on port 3001 and provide an API endpoint:
  *    POST /api/send-boss - Send a boss notification to Discord
  */
@@ -51,6 +53,8 @@ let discordClient = null
 let isConnected = false
 let targetChannelId = process.env.DISCORD_CHANNEL_ID
 const participationData = new Map()
+// Store boss data for each message to enable respawn time updates
+const messageBossData = new Map()
 
 // Initialize Discord bot
 async function initializeDiscordBot() {
@@ -105,11 +109,76 @@ async function initializeDiscordBot() {
     await discordClient.login(token)
     
     console.log('🤖 Discord bot initialized successfully!')
+
+    // Start periodic respawn time updates
+    startPeriodicRespawnTimeUpdates()
+
     return true
   } catch (error) {
     console.error('❌ Failed to initialize Discord bot:', error)
     return false
   }
+}
+
+// Periodic respawn time updates for Discord messages
+function startPeriodicRespawnTimeUpdates() {
+  console.log('🔄 Starting periodic respawn time updates (every 2 minutes)')
+
+  setInterval(async () => {
+    if (!isConnected || !discordClient) {
+      return
+    }
+
+    console.log('🔄 Updating respawn times in Discord messages...')
+
+    for (const [messageId, bossData] of messageBossData.entries()) {
+      try {
+        const participationInfo = participationData.get(messageId)
+        if (!participationInfo) {
+          console.log(`⚠️ No participation data for message ${messageId}, skipping update`)
+          continue
+        }
+
+        // Try to fetch the message
+        const channel = await discordClient.channels.fetch(targetChannelId)
+        if (!channel) {
+          console.log(`⚠️ Could not fetch channel ${targetChannelId}`)
+          continue
+        }
+
+        const message = await channel.messages.fetch(messageId).catch(() => null)
+        if (!message) {
+          console.log(`⚠️ Could not fetch message ${messageId}, removing from tracking`)
+          messageBossData.delete(messageId)
+          participationData.delete(messageId)
+          continue
+        }
+
+        // Update the embed with current respawn time
+        await updateParticipationEmbed(message, participationInfo)
+
+      } catch (error) {
+        console.error(`❌ Error updating message ${messageId}:`, error.message)
+      }
+    }
+
+    console.log(`✅ Respawn time update complete. Tracking ${messageBossData.size} messages.`)
+
+    // Clean up old messages (older than 24 hours)
+    const now = new Date()
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+    for (const [messageId, bossData] of messageBossData.entries()) {
+      // Check if boss is very old (more than 24 hours past respawn time)
+      const respawnTime = calculateRespawnTime(bossData)
+      if (respawnTime && respawnTime.getTime() < oneDayAgo.getTime()) {
+        console.log(`🗑️ Removing old boss message ${messageId} for ${bossData.monster}`)
+        messageBossData.delete(messageId)
+        participationData.delete(messageId)
+      }
+    }
+
+  }, 2 * 60 * 1000) // Update every 2 minutes
 }
 
 // Handle reaction additions
@@ -276,21 +345,69 @@ async function updateParticipationEmbed(message, participationData) {
       updatedEmbed.setThumbnail(embed.thumbnail.url)
     }
 
-    // Add all the original fields (boss info)
-    if (embed.fields && embed.fields.length >= 4) {
+    // Add all the original fields (boss info) with updated respawn time
+    if (embed.fields && embed.fields.length >= 2) {
       console.log(`📋 Preserving ${embed.fields.length} original fields`)
 
-      // Add the first 4 fields (boss name, time, points, notes)
-      for (let i = 0; i < Math.min(4, embed.fields.length); i++) {
-        const field = embed.fields[i]
+      // Get the stored boss data for this message to recalculate respawn time
+      const storedBossData = messageBossData.get(message.id)
+
+      // Add boss name field
+      const bossNameField = embed.fields.find(field => field.name === '👹 Boss Name')
+      if (bossNameField) {
         updatedEmbed.addFields({
-          name: field.name,
-          value: field.value,
-          inline: field.inline || false
+          name: bossNameField.name,
+          value: bossNameField.value,
+          inline: bossNameField.inline || false
+        })
+      }
+
+      // Add respawn time field with updated calculation
+      let timeValue = 'Unknown'
+      if (storedBossData) {
+        // Recalculate the respawn time with current time
+        const formattedTime = formatRespawnTime(storedBossData)
+        const formattedDate = formatDiscordDate(storedBossData)
+
+        timeValue = formattedTime
+        if (formattedDate) {
+          timeValue += `\n${formattedDate}`
+        }
+        console.log(`⏰ Updated respawn time for ${storedBossData.monster}: ${formattedTime}`)
+      } else {
+        // Fallback to original time from embed if no stored data
+        const originalTimeField = embed.fields.find(field => field.name === '⏰ Respawn Time')
+        timeValue = originalTimeField?.value || 'Unknown'
+        console.log(`⚠️ No stored boss data found for message ${message.id}, using original time`)
+      }
+
+      updatedEmbed.addFields({
+        name: '⏰ Respawn Time',
+        value: timeValue,
+        inline: true
+      })
+
+      // Add points field if it exists
+      const pointsField = embed.fields.find(field => field.name === '💰 Points')
+      if (pointsField) {
+        updatedEmbed.addFields({
+          name: pointsField.name,
+          value: pointsField.value,
+          inline: pointsField.inline || false
+        })
+      }
+
+      // Add notes field if it exists
+      const notesField = embed.fields.find(field => field.name === '📝 Notes')
+      if (notesField) {
+        updatedEmbed.addFields({
+          name: notesField.name,
+          value: notesField.value,
+          inline: notesField.inline || false
         })
       }
     } else {
-      console.log(`⚠️ Warning: Expected at least 4 fields, found ${embed.fields?.length || 0}`)
+      console.log(`⚠️ Warning: Expected at least 2 fields, found ${embed.fields?.length || 0}`)
     }
 
     // Add the updated participation fields
@@ -416,7 +533,7 @@ function createBossEmbed(bossData, participationData = null) {
   const embed = new EmbedBuilder()
     .setTitle(`🔥 Boss Alert: ${bossData.name || bossData.monster}`)
     .setColor(0xFF6B35)
-    .setDescription(`A boss is ready for hunting! React below to indicate your participation.`)
+    .setDescription(`@here A boss is ready for hunting! React below to indicate your participation.`)
     .addFields(
       {
         name: '👹 Boss Name',
@@ -428,16 +545,8 @@ function createBossEmbed(bossData, participationData = null) {
         value: timeValue,
         inline: true
       },
-      {
-        name: '💰 Points',
-        value: bossData.points ? `${bossData.points} pts` : 'Unknown',
-        inline: true
-      },
-      {
-        name: '📝 Notes',
-        value: bossData.notes || 'No additional notes',
-        inline: false
-      },
+
+
       {
         name: '👥 Participation Status',
         value: participationValue,
@@ -539,6 +648,8 @@ app.post('/api/send-boss', async (req, res) => {
     await message.react('❌')
 
     participationData.set(message.id, initialParticipationData)
+    // Store boss data for this message to enable respawn time updates
+    messageBossData.set(message.id, processedBossData)
 
     console.log(`✅ Boss notification sent successfully! Message ID: ${message.id}`)
 
